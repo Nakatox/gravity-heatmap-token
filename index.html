@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Visualizer</title>
+    <style>
+        canvas {
+            display: block;
+            margin: 0 auto;
+            background-color: black;
+        }
+
+        .popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+            text-align: center;
+        }
+
+        .startButton {
+            margin-top: 10px;
+        }
+        .copyButton {
+            display: none;
+        }
+        .heatmapNumberDisplay {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 10px;
+            height: 100px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="popup">
+        <label for="resolutionRange">Select Complexity (4-30 (less is more)):</label>
+        <input type="range" class="resolutionRange" min="4" max="30" value="17">
+        <button class="startButton">Start Simulation</button>
+        <div class="heatmapNumberDisplay"></div>
+        <button class="copyButton">Copy</button>
+    </div>
+    <canvas class="visualizer"></canvas>
+
+    <script>
+        const canvas = document.querySelector('.visualizer');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let particles = [];
+        let frameCount = 0;
+        let simulationRunning = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.querySelector('.popup').style.display = 'block';
+        });
+
+        document.querySelector('.startButton').addEventListener('click', () => {
+            const numResolution = document.querySelector('.resolutionRange').value;
+            let heatmap = createHeatmap(numResolution);
+            particles = createParticles(200);
+            document.querySelector('.popup').style.display = 'none';
+            simulationRunning = true;
+            requestAnimationFrame(() => drawVisualizer(numResolution, heatmap));
+
+            setTimeout(() => {
+                simulationRunning = false;
+                const heatmapNumber = generateHeatmapNumber(heatmap);
+                document.querySelector('.heatmapNumberDisplay').innerText = `Heatmap Number: ${heatmapNumber}`;
+                document.querySelector('.copyButton').style.display = 'block';
+                document.querySelector('.popup').style.display = 'block';
+            }, 10000);
+        });
+
+        document.querySelector('.copyButton').addEventListener('click', () => {
+            const heatmapNumber = document.querySelector('.heatmapNumberDisplay').innerText;
+            navigator.clipboard.writeText(heatmapNumber);
+        });
+
+        function endSimulation(heatmap) {
+            simulationRunning = false;
+            const heatmapNumber = generateHeatmapNumber(heatmap);
+            document.querySelector('.heatmapNumberDisplay').innerText = `Heatmap Number: ${heatmapNumber}`;
+            document.querySelector('.popup').style.display = 'block';
+        }
+
+        function createParticles(numParticles) {
+            return Array.from({ length: numParticles }, createParticle);
+        }
+
+        function createParticle() {
+            return {
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 20,
+                vy: (Math.random() - 0.5) * 20,
+                size: 10,
+                hue: Math.random() * 360,
+                fx: 1,
+                fy: 1,
+            };
+        }
+
+        function createHeatmap(resolution) {
+            return Array.from({ length: Math.round(canvas.width / resolution) }, () => Array(Math.round(canvas.height / resolution)).fill(0));
+        }
+
+        function calculateDistance(p1, p2) {
+            return Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        }
+
+        function limitVelocity(particle, maxVelocity) {
+            particle.vx = Math.max(Math.min(particle.vx, maxVelocity), -maxVelocity);
+            particle.vy = Math.max(Math.min(particle.vy, maxVelocity), -maxVelocity);
+        }
+
+        function drawHeatmap(heatmap, resolution) {
+            const maxHeat = Math.max(...heatmap.flat());
+            for (let x = 0; x < heatmap.length; x++) {
+                for (let y = 0; y < heatmap[0].length; y++) {
+                    const heat = heatmap[x][y];
+                    if (heat > 0) {
+                        const hue = 240 - (240 * heat / maxHeat);
+                        ctx.fillStyle = `hsl(${hue}, 100%, 50%)`;
+                        ctx.fillRect(x * resolution, y * resolution, resolution, resolution);
+                    }
+                }
+            }
+        }
+
+        function drawVisualizer(resolution, heatmap) {
+            if (!simulationRunning) {
+                endSimulation(heatmap);
+                return;
+            }
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const center = { x: canvas.width / 2, y: canvas.height / 2 };
+
+            particles.forEach((particle, i) => {
+                updateParticlePosition(particle);
+                applyCenterForce(particle, center);
+                drawParticle(particle);
+                limitVelocity(particle, 30);
+                heatmap = updateHeatmap(particle, resolution, heatmap);
+
+                if (frameCount % 10 === 0) {
+                    applyParticleInteractionForce(particle, particles.slice(i + 1));
+                }
+            });
+
+            drawHeatmap(heatmap, resolution);
+
+            frameCount++;
+            requestAnimationFrame(() => drawVisualizer(resolution, heatmap));
+        }
+
+        function generateHeatmapNumber(heatmap) {
+            let heatmapNumber = "";
+            heatmap.forEach(row => {
+                row.forEach(cell => {
+                    if (cell === 0) heatmapNumber += "0";
+                    else if (cell > 0 && cell <= 10) heatmapNumber += "1";
+                    else if (cell > 10 && cell <= 30) heatmapNumber += "2";
+                    else if (cell > 30 && cell <= 50) heatmapNumber += "3";
+                    else if (cell > 50 && cell <= 70) heatmapNumber += "4";
+                    else if (cell > 70 && cell <= 90) heatmapNumber += "5";
+                    else if (cell > 90 && cell <= 110) heatmapNumber += "6";
+                    else if (cell > 110 && cell <= 130) heatmapNumber += "7";
+                    else if (cell > 130 && cell <= 150) heatmapNumber += "8";
+                    else if (cell > 150 && cell <= 170) heatmapNumber += "9";
+                    else if (cell > 170 && cell <= 190) heatmapNumber += "A";
+                    else if (cell > 190 && cell <= 210) heatmapNumber += "B";
+                    else if (cell > 210 && cell <= 230) heatmapNumber += "C";
+                    else if (cell > 230 && cell <= 250) heatmapNumber += "D";
+                    else if (cell > 250 && cell <= 270) heatmapNumber += "E";
+                    else if (cell > 270 && cell <= 290) heatmapNumber += "F";
+                });
+            });
+
+            // add a return to line every 50 characters
+            heatmapNumber = heatmapNumber.match(/.{1,50}/g).join('\n');
+            return heatmapNumber;
+        }
+
+        function updateParticlePosition(particle) {
+            particle.x += particle.vx;
+            particle.y += particle.vy;
+        }
+
+        function applyCenterForce(particle, center) {
+            const distToCenter = calculateDistance(particle, center);
+            const dxToCenter = (center.x - particle.x) / distToCenter;
+            const dyToCenter = (center.y - particle.y) / distToCenter;
+            const centerForce = 0.3;
+            particle.vx += dxToCenter * centerForce;
+            particle.vy += dyToCenter * centerForce;
+        }
+
+        function drawParticle(particle) {
+            ctx.beginPath();
+            ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+            ctx.fillStyle = `hsl(${particle.hue}, 100%, 50%)`;
+            ctx.fill();
+        }
+
+        function updateHeatmap(particle, resolution, heatmap) {
+            const heatmapX = Math.floor(particle.x / resolution);
+            const heatmapY = Math.floor(particle.y / resolution);
+            if (heatmap[heatmapX] && heatmap[heatmapX][heatmapY] !== undefined) {
+                heatmap[heatmapX][heatmapY] += 1;
+            }
+            return heatmap;
+        }
+
+        function applyParticleInteractionForce(particle, otherParticles) {
+            otherParticles.forEach(otherParticle => {
+                const dist = calculateDistance(particle, otherParticle);
+                const force = (dist - 200) * -0.0005;
+                const dx = (particle.x - otherParticle.x) / dist;
+                const dy = (particle.y - otherParticle.y) / dist;
+                particle.vx += dx * force;
+                particle.vy += dy * force;
+                otherParticle.vx -= dx * force;
+                otherParticle.vy -= dy * force;
+                limitVelocity(particle, 15);
+            });
+        }
+    </script>
+</body>
+
+</html>
